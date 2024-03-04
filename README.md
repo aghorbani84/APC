@@ -1,2 +1,2 @@
 # APC
-APC(AbolfazlPortScanner) help you for find local open  ports!
+APC(AbolfazlPortScanner) help you for find tcp open ports!
