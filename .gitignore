@@ -1,0 +1,7 @@
+/apc
+/apc.exe
+/APC
+/APC.exe
+*.test
+/coverage.out
+/results.json
