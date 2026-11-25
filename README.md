@@ -1,13 +1,39 @@
 # APC — Abolfazl Port Scanner
 
-A dependency-free TCP connect scanner written in Go. Scan IPv4 and IPv6 targets
-with bounded concurrency, configurable port ranges, and optional JSON output.
+> A small, dependency-free TCP connect scanner in Go — built for learning and for checking hosts you own or are authorized to test.
 
-**Only scan systems you own or have explicit permission to test.**
+[![Go CI](https://github.com/aghorbani84/APC/actions/workflows/ci.yml/badge.svg)](https://github.com/aghorbani84/APC/actions/workflows/ci.yml)
+![Go](https://img.shields.io/badge/Go-1.22%2B-00ADD8?logo=go&logoColor=white)
+![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)
+[![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
 
-## Install and run
+> [!IMPORTANT]
+> **Only scan systems you own or have explicit, written permission to test.** Unauthorized scanning may be illegal and is against the terms of most networks and providers.
 
-Install [Go](https://go.dev/dl/) 1.22 or newer, then:
+## Overview
+
+APC is a learning-oriented network-administration tool. It attempts plain TCP connections to a list of ports on one or more hosts and reports which ones accept a connection. It is useful for auditing your own machines, lab VMs, or home network, and as a readable example of bounded concurrency in Go.
+
+It does **not** do UDP scanning, service/version detection, OS fingerprinting, or vulnerability testing, and it needs no elevated privileges.
+
+## Features
+
+- **TCP connect scan** over IPv4 and IPv6 (every resolved address of a host is scanned)
+- **Flexible port specs** — comma-separated ports and inclusive ranges (`22,80,443,8000-8100`); duplicates and overlaps are scanned once
+- **Bounded worker pool** — configurable concurrency (1–1024) and per-connection timeout
+- **JSON output** for scripting, or human-readable text with a summary line
+- **Interactive mode** — run with no arguments to be prompted for a host (blank = `localhost`)
+- **Clean cancellation** — `Ctrl+C` stops outstanding connections and exits non-zero
+- **Zero third-party dependencies** — standard library only
+
+## Tech Stack
+
+- Go 1.22+ (standard library: `net`, `context`, `flag`, `encoding/json`, `sync`)
+- GitHub Actions CI: `gofmt`, `go vet`, tests on Go 1.22 and stable, plus a race-detector job
+
+## Getting Started
+
+### Build from source
 
 ```sh
 git clone https://github.com/aghorbani84/APC.git
@@ -16,16 +42,15 @@ go build -o apc .
 ./apc -help
 ```
 
-On Windows, use `go build -o apc.exe .` and run `apc.exe`.
-You can also run from source with `go run .`, or install directly:
+On Windows, use `go build -o apc.exe .` and run `apc.exe`. You can also run directly with `go run .`.
+
+### Install with `go install`
 
 ```sh
 go install github.com/aghorbani84/APC@latest
 ```
 
-Direct installation uses the latest published repository version, which may not
-include changes on an unmerged branch. The executable is installed in `GOBIN`
-(or `$(go env GOPATH)/bin` by default); add that directory to your `PATH`.
+The binary is placed in `GOBIN` (or `$(go env GOPATH)/bin`); make sure that directory is on your `PATH`.
 
 ## Usage
 
@@ -33,21 +58,19 @@ include changes on an unmerged branch. The executable is installed in `GOBIN`
 apc [options] [host ...]
 ```
 
-**Place options before host arguments.** Run without arguments for an interactive
-hostname prompt; a blank response (or end of input) selects `localhost`. With
-options but no hosts, APC uses `localhost` without prompting.
+Options must come **before** host arguments. With options but no hosts, APC scans `localhost`.
 
 ```sh
-# Interactive mode (ports 1–444)
+# Interactive mode (default ports 1–444)
 ./apc
 
-# Scan selected ports on a local system
+# Selected ports on your own machine
 ./apc -ports 22,80,443,8000-8100 127.0.0.1
 
-# Scan multiple targets, including IPv6 (no brackets around the address)
+# Several targets, including IPv6 (no brackets)
 ./apc -ports 80,443 -workers 50 -timeout 1s 127.0.0.1 ::1
 
-# Include unsuccessful connection attempts
+# Include ports that did not accept a connection
 ./apc -ports 1-1024 -all localhost
 
 # Machine-readable output
@@ -56,49 +79,46 @@ options but no hosts, APC uses `localhost` without prompting.
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `-ports` | `1-444` | Comma-separated ports and inclusive ranges, from 1 to 65535 |
-| `-workers` | `100` | Maximum concurrent connection attempts, from 1 to 1024 |
-| `-timeout` | `500ms` | Positive timeout per TCP connection, such as `250ms` or `2s` |
-| `-all` | `false` | Include closed/failed ports, not only open ports |
-| `-json` | `false` | Emit a JSON array with no prompts, progress text, or color |
+| `-ports` | `1-444` | Ports and inclusive ranges, 1–65535 |
+| `-workers` | `100` | Max concurrent connection attempts, 1–1024 |
+| `-timeout` | `500ms` | Timeout per TCP connection (e.g. `250ms`, `2s`) |
+| `-all` | `false` | Also list closed/failed ports |
+| `-json` | `false` | Emit a JSON array (no prompts, progress text, or color) |
 | `-help` | | Show usage |
 
-All resolved IPv4 and IPv6 addresses are scanned. Duplicate resolved addresses
-and overlapping CLI port ranges are scanned only once. Results are sorted by
-address (lexically), then by port. Text output ends with a summary; JSON emits
-an array (including `[]` when no matching ports were found):
+Example JSON:
 
 ```json
 [{"port":80,"is_open":true,"protocol":"tcp","hostname":"127.0.0.1"}]
 ```
 
-The `hostname` field contains the resolved IP address. `is_open: false` means
-that a TCP connection could not be established: the port may be closed,
-filtered, unreachable, or timed out. APC does not perform UDP scanning, service
-detection, or vulnerability testing. No elevated privileges are needed.
-
-Press **Ctrl+C** to cancel outstanding connections. Cancellation, invalid input,
-and DNS resolution errors produce a diagnostic on stderr and a nonzero exit
-status. A completed scan exits successfully even if no ports are open. Results
-are buffered until completion; cancellation does not emit a partial report.
-The timeout is per connection, not a whole-scan deadline.
+`hostname` holds the resolved IP address. `is_open: false` means no TCP connection could be established — the port may be closed, filtered, unreachable, or timed out. Results are sorted by address, then port, and are printed once the scan completes.
 
 ## Development
 
-No third-party Go dependencies are required. Tests only connect to local
-loopback listeners; the IPv6 test skips if IPv6 is unavailable.
-
 ```sh
-gofmt -w main.go main_test.go
+gofmt -l .          # should print nothing
 go vet ./...
 go test -race ./...
 go build ./...
 ```
 
-GitHub Actions runs formatting checks, vet, tests, and a build on the minimum
-supported Go version and the latest stable Go version. A separate job runs the
-race detector on the latest stable version.
+Tests only connect to local loopback listeners; the IPv6 test is skipped if IPv6 is unavailable.
+
+## Project Structure
+
+```text
+APC/
+├── main.go          # CLI, port parsing, resolver and worker-pool scanner
+├── main_test.go     # Unit and loopback integration tests
+├── go.mod           # Module definition (Go 1.22)
+└── .github/workflows/ci.yml
+```
 
 ## License
 
-GNU General Public License v3.0 — see [LICENSE](LICENSE).
+Released under the [GNU General Public License v3.0](LICENSE).
+
+## Author
+
+Built by [@aghorbani84](https://github.com/aghorbani84).
